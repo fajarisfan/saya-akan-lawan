@@ -6,7 +6,7 @@ from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont
 
 st.set_page_config(
-    page_title="MEME GACOR",
+    page_title="BUAT SERU-SERUAN AJA",
     page_icon="🔥",
     layout="centered"
 )
