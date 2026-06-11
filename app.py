@@ -222,7 +222,7 @@ hr { border-top: 1px solid #E5E5E5 !important; }
 st.markdown("""
 <div class="vb-header">
     <div class="vb-overline">Meme Generator · Buat Gabut</div>
-    <div class="vb-title">MEME<br>GACOR</div>
+    <div class="vb-title">UNTUK<br>SERU-SERUAN AJE</div>
     <div class="vb-sub">Upload gambar + audio — generate jadi satu video, kirim ke WA.</div>
 </div>
 """, unsafe_allow_html=True)
