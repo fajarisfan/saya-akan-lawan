@@ -1,10 +1,8 @@
 import streamlit as st
 import os
 import tempfile
-import base64
-from pathlib import Path
+from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont
-import numpy as np
 
 st.set_page_config(
     page_title="Meme Gacor 🔥",
@@ -12,403 +10,171 @@ st.set_page_config(
     layout="centered"
 )
 
-# ── CSS ──────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&display=swap');
-
-html, body, [class*="css"] {
-    font-family: 'Space Grotesk', sans-serif;
-}
-
-.main { background: #0d0d0d; }
-
-.stApp {
-    background: #0d0d0d;
-    color: #f0f0f0;
-}
-
+html, body, [class*="css"] { font-family: 'Space Grotesk', sans-serif; }
+.stApp { background: #0d0d0d; color: #f0f0f0; }
 h1, h2, h3 { color: #FFC857 !important; }
-
 .stButton > button {
-    background: #FFC857;
-    color: #0d0d0d;
-    font-weight: 700;
-    border: none;
-    border-radius: 8px;
-    padding: 0.6rem 1.4rem;
-    font-family: 'Space Grotesk', sans-serif;
-    font-size: 1rem;
-    transition: all 0.2s;
+    background: #FFC857; color: #0d0d0d; font-weight: 700;
+    border: none; border-radius: 8px; padding: 0.6rem 1.4rem;
+    font-family: 'Space Grotesk', sans-serif; font-size: 1rem;
 }
-.stButton > button:hover {
-    background: #ffdb8a;
-    transform: translateY(-1px);
-}
-
-.upload-box {
-    border: 2px dashed #FFC857;
-    border-radius: 12px;
-    padding: 2rem;
-    text-align: center;
-    background: #1a1a1a;
-    margin-bottom: 1rem;
-}
-
-.audio-card {
-    background: #1a1a1a;
-    border: 1px solid #333;
-    border-radius: 10px;
-    padding: 1rem;
-    cursor: pointer;
-    transition: border-color 0.2s;
-}
-.audio-card:hover { border-color: #FFC857; }
-
-.tag {
-    display: inline-block;
-    background: #FFC857;
-    color: #0d0d0d;
-    font-size: 0.7rem;
-    font-weight: 700;
-    padding: 2px 8px;
-    border-radius: 4px;
-    margin-right: 4px;
-}
-
-.preview-container {
-    background: #1a1a1a;
-    border-radius: 12px;
-    padding: 1.5rem;
-    border: 1px solid #2a2a2a;
-}
-
+.stButton > button:hover { background: #ffdb8a; transform: translateY(-1px); }
 hr { border-color: #2a2a2a; }
+.generate-btn > button {
+    width: 100%; padding: 1rem; font-size: 1.2rem;
+    background: #FFC857; border-radius: 12px;
+}
 </style>
 """, unsafe_allow_html=True)
 
-# ── AUDIO PRESETS ────────────────────────────────────────────────────
-# Audio berupa URL dari file yang sudah dihosting atau base64
-# Untuk demo: kita sediakan tombol pilih + teks quotes-nya
-AUDIO_PRESETS = {
-    "🏳️ Jokowi – Saya Sudah Lama Diam": {
-        "file": "jokowi_diam.mp3",
-        "quote": '"Saya sudah lama diam, tapi untuk kali ini saya akan lawan!"',
-        "speaker": "Jokowi",
-        "tag": "CLASSIC",
-        "emoji": "🏳️"
-    },
-    "💪 Prabowo – Saya Sudah Lama Diam": {
-        "file": "prabowo_diam.mp3",
-        "quote": '"Saya sudah lama diam, tapi untuk kali ini saya akan lawan!"',
-        "speaker": "Prabowo",
-        "tag": "VIRAL",
-        "emoji": "💪"
-    },
-    "🤝 Jokowi – Rakyat Jangan Diprovokasi": {
-        "file": "jokowi_provokasi.mp3",
-        "quote": '"Jangan mau diprovokasi, kita harus tetap bersatu!"',
-        "speaker": "Jokowi",
-        "tag": "BIJAK",
-        "emoji": "🤝"
-    },
-    "🔥 Prabowo – Ojo Grusa Grusu": {
-        "file": "prabowo_ojo.mp3",
-        "quote": '"Ojo grusa grusu, ojo kesusu!"',
-        "speaker": "Prabowo",
-        "tag": "JAWA",
-        "emoji": "🔥"
-    },
-}
-
-# ── HEADER ───────────────────────────────────────────────────────────
 st.markdown("# 🔥 Meme Gacor Generator")
-st.markdown("Upload gambar + pilih audio = siap kirim ke WA")
+st.markdown("Upload gambar + audio → langsung jadi video siap kirim WA")
 st.markdown("---")
 
-# ── STATE ────────────────────────────────────────────────────────────
-if "selected_audio" not in st.session_state:
-    st.session_state.selected_audio = None
-if "uploaded_image" not in st.session_state:
-    st.session_state.uploaded_image = None
+# ── UPLOAD ───────────────────────────────────────────────────────────
+col1, col2 = st.columns(2)
 
-# ── STEP 1: UPLOAD GAMBAR ────────────────────────────────────────────
-st.markdown("### 📸 Step 1 — Upload Gambar")
-uploaded_file = st.file_uploader(
-    "Drag & drop atau klik untuk upload",
-    type=["jpg", "jpeg", "png", "gif", "webp"],
-    label_visibility="collapsed"
-)
+with col1:
+    st.markdown("### 📸 Gambar")
+    uploaded_file = st.file_uploader(
+        "JPG / PNG / WEBP",
+        type=["jpg", "jpeg", "png", "webp"],
+        label_visibility="collapsed"
+    )
+    if uploaded_file:
+        st.image(uploaded_file, use_container_width=True)
+
+with col2:
+    st.markdown("### 🎙️ Audio")
+    uploaded_audio = st.file_uploader(
+        "MP3 / WAV / OGG",
+        type=["mp3", "wav", "ogg", "m4a"],
+        key="audio_up",
+        label_visibility="collapsed"
+    )
+    if uploaded_audio:
+        st.audio(uploaded_audio)
+
+st.markdown("---")
 
 caption_text = st.text_input(
-    "✏️ Caption (opsional)",
-    placeholder="Misal: Pertamax naik lagi bro 😭",
-    help="Teks ini akan ditampilin di atas gambar"
+    "✏️ Caption di video (opsional)",
+    placeholder="Misal: Pertamax naik lagi bro 😭"
 )
-
-if uploaded_file:
-    st.session_state.uploaded_image = uploaded_file
-    img = Image.open(uploaded_file)
-    
-    # Resize preview
-    max_w = 600
-    if img.width > max_w:
-        ratio = max_w / img.width
-        new_h = int(img.height * ratio)
-        img_preview = img.resize((max_w, new_h), Image.LANCZOS)
-    else:
-        img_preview = img
-    
-    # Tambahin caption kalau ada
-    if caption_text:
-        draw = ImageDraw.Draw(img_preview)
-        # Background strip
-        strip_h = 50
-        draw.rectangle([0, 0, img_preview.width, strip_h], fill=(0, 0, 0, 200))
-        
-        try:
-            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 22)
-        except:
-            font = ImageFont.load_default()
-        
-        draw.text((12, 12), caption_text, fill=(255, 200, 87), font=font)
-    
-    st.image(img_preview, use_container_width=True)
 
 st.markdown("---")
 
-# ── STEP 2: PILIH AUDIO ──────────────────────────────────────────────
-st.markdown("### 🎙️ Step 2 — Pilih Audio")
-st.markdown("*Upload file audio lo sendiri, atau pakai preset di bawah:*")
+# ── GENERATE ─────────────────────────────────────────────────────────
+ready = uploaded_file is not None and uploaded_audio is not None
 
-# Upload audio sendiri
-custom_audio = st.file_uploader(
-    "Upload audio sendiri (MP3/WAV/OGG)",
-    type=["mp3", "wav", "ogg", "m4a"],
-    key="custom_audio",
-    label_visibility="visible"
-)
-
-if custom_audio:
-    st.session_state.selected_audio = {"type": "custom", "file": custom_audio, "name": custom_audio.name}
-    st.success(f"✅ Audio '{custom_audio.name}' siap!")
-    st.audio(custom_audio)
-
-st.markdown("**— atau pilih preset —**")
-
-# Grid preset audio
-cols = st.columns(2)
-preset_names = list(AUDIO_PRESETS.keys())
-
-for i, preset_name in enumerate(preset_names):
-    preset = AUDIO_PRESETS[preset_name]
-    col = cols[i % 2]
-    
-    with col:
-        is_selected = (
-            st.session_state.selected_audio is not None and
-            st.session_state.selected_audio.get("type") == "preset" and
-            st.session_state.selected_audio.get("name") == preset_name
-        )
-        
-        border_color = "#FFC857" if is_selected else "#333"
-        bg_color = "#2a2200" if is_selected else "#1a1a1a"
-        
-        st.markdown(f"""
-        <div style="background:{bg_color}; border:2px solid {border_color}; 
-             border-radius:10px; padding:1rem; margin-bottom:0.5rem;">
-            <div style="font-size:1.5rem">{preset['emoji']}</div>
-            <div style="font-weight:700; font-size:0.9rem; color:#f0f0f0; margin:4px 0">
-                {preset['speaker']}
-            </div>
-            <div style="background:#FFC857; color:#0d0d0d; font-size:0.65rem; 
-                 font-weight:700; display:inline-block; padding:2px 6px; 
-                 border-radius:4px; margin-bottom:6px">
-                {preset['tag']}
-            </div>
-            <div style="font-size:0.78rem; color:#aaa; font-style:italic; line-height:1.4">
-                {preset['quote']}
-            </div>
-            {'<div style="color:#FFC857; font-size:0.75rem; margin-top:6px">✓ DIPILIH</div>' if is_selected else ''}
-        </div>
-        """, unsafe_allow_html=True)
-        
-        if st.button(f"{'✓ Dipilih' if is_selected else 'Pilih'}", key=f"btn_{i}"):
-            st.session_state.selected_audio = {
-                "type": "preset",
-                "name": preset_name,
-                "data": preset
-            }
-            st.rerun()
-
-st.markdown("---")
-
-# ── STEP 3: PREVIEW & DOWNLOAD ───────────────────────────────────────
-st.markdown("### 🎬 Step 3 — Preview & Download")
-
-has_image = uploaded_file is not None
-has_audio = st.session_state.selected_audio is not None
-
-if not has_image and not has_audio:
-    st.info("⬆️ Upload gambar dan pilih audio dulu ya")
-elif not has_image:
-    st.warning("📸 Gambar belum diupload")
-elif not has_audio:
-    st.warning("🎙️ Audio belum dipilih")
+if not ready:
+    st.info("⬆️ Upload gambar dan audio dulu baru bisa generate")
 else:
-    audio_info = st.session_state.selected_audio
-    
-    # Show preview
-    col_img, col_info = st.columns([1, 1])
-    
-    with col_img:
-        st.markdown("**Preview Gambar:**")
-        img_display = Image.open(uploaded_file)
-        if caption_text:
-            draw = ImageDraw.Draw(img_display)
-            strip_h = 60
-            draw.rectangle([0, 0, img_display.width, strip_h], fill=(0, 0, 0, 200))
+    if st.button("🎬 Generate Video", use_container_width=True):
+        with st.spinner("Lagi render video..."):
             try:
-                font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 28)
-            except:
-                font = ImageFont.load_default()
-            draw.text((15, 15), caption_text, fill=(255, 200, 87), font=font)
-        
-        st.image(img_display, use_container_width=True)
-    
-    with col_info:
-        st.markdown("**Audio Dipilih:**")
-        if audio_info["type"] == "preset":
-            preset = audio_info["data"]
-            st.markdown(f"""
-            <div style="background:#1a1a1a; border:1px solid #FFC857; border-radius:10px; padding:1rem;">
-                <div style="font-size:2rem">{preset['emoji']}</div>
-                <div style="font-weight:700; color:#FFC857">{preset['speaker']}</div>
-                <div style="font-size:0.8rem; color:#aaa; font-style:italic; margin-top:8px">
-                    {preset['quote']}
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-        else:
-            st.markdown(f"""
-            <div style="background:#1a1a1a; border:1px solid #FFC857; border-radius:10px; padding:1rem;">
-                <div style="font-size:2rem">🎵</div>
-                <div style="font-weight:700; color:#FFC857">Custom Audio</div>
-                <div style="font-size:0.8rem; color:#aaa; margin-top:8px">{audio_info['name']}</div>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        st.markdown("")
-        st.markdown("**Cara pakai di WA:**")
-        st.markdown("""
-        1. Download gambar di bawah
-        2. Download audio di bawah  
-        3. Kirim gambar ke WA dulu
-        4. Reply dengan audio
-        
-        *Atau gabungin jadi video (butuh ffmpeg)*
-        """)
-    
-    st.markdown("---")
-    
-    # Download gambar
-    col_d1, col_d2, col_d3 = st.columns(3)
-    
-    with col_d1:
-        # Prepare final image
-        img_final = Image.open(uploaded_file)
-        if caption_text:
-            draw = ImageDraw.Draw(img_final)
-            strip_h = 60
-            draw.rectangle([0, 0, img_final.width, strip_h], fill=(0, 0, 0, 200))
-            try:
-                font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 28)
-            except:
-                font = ImageFont.load_default()
-            draw.text((15, 15), caption_text, fill=(255, 200, 87), font=font)
-        
-        from io import BytesIO
-        buf = BytesIO()
-        img_final.save(buf, format="JPEG", quality=90)
-        buf.seek(0)
-        
-        st.download_button(
-            label="📷 Download Gambar",
-            data=buf.getvalue(),
-            file_name="meme_gacor.jpg",
-            mime="image/jpeg",
-            use_container_width=True
-        )
-    
-    with col_d2:
-        # Audio download
-        if audio_info["type"] == "custom":
-            audio_bytes = audio_info["file"].read()
-            st.download_button(
-                label="🎵 Download Audio",
-                data=audio_bytes,
-                file_name=audio_info["name"],
-                mime="audio/mpeg",
-                use_container_width=True
-            )
-        else:
-            st.button("🎵 Audio (Upload dulu)", disabled=True, use_container_width=True)
-    
-    with col_d3:
-        # Video gabungan dengan moviepy jika tersedia
-        try:
-            import moviepy.editor as mp
-            can_video = True
-        except:
-            can_video = False
-        
-        if can_video and audio_info["type"] == "custom":
-            if st.button("🎬 Gabung jadi Video", use_container_width=True):
-                with st.spinner("Lagi bikin video..."):
+                import moviepy.editor as mpe
+                import numpy as np
+
+                with tempfile.TemporaryDirectory() as tmp:
+                    # ── Siapkan gambar ──────────────────────────────
+                    img = Image.open(uploaded_file).convert("RGB")
+
+                    # Resize ke 720p max
+                    max_w = 1280
+                    if img.width > max_w:
+                        ratio = max_w / img.width
+                        img = img.resize((max_w, int(img.height * ratio)), Image.LANCZOS)
+
+                    # Pastikan dimensi genap (wajib buat codec h264)
+                    w = img.width if img.width % 2 == 0 else img.width - 1
+                    h = img.height if img.height % 2 == 0 else img.height - 1
+                    img = img.resize((w, h), Image.LANCZOS)
+
+                    draw = ImageDraw.Draw(img)
+
+                    # Caption bar bawah
+                    if caption_text:
+                        try:
+                            font_cap = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 32)
+                        except:
+                            font_cap = ImageFont.load_default()
+                        bar_h = 55
+                        draw.rectangle([0, h - bar_h, w, h], fill=(0, 0, 0, 210))
+                        draw.text((16, h - bar_h + 10), caption_text, fill=(255, 200, 87), font=font_cap)
+
+                    # Tombol play overlay di tengah
                     try:
-                        with tempfile.TemporaryDirectory() as tmp:
-                            # Save image
-                            img_path = os.path.join(tmp, "img.jpg")
-                            img_final.save(img_path)
-                            
-                            # Save audio
-                            audio_path = os.path.join(tmp, "audio.mp3")
-                            audio_bytes_data = audio_info["file"].getvalue()
-                            with open(audio_path, "wb") as f:
-                                f.write(audio_bytes_data)
-                            
-                            # Create video
-                            audio_clip = mp.AudioFileClip(audio_path)
-                            duration = audio_clip.duration
-                            
-                            img_clip = mp.ImageClip(img_path).set_duration(duration)
-                            img_clip = img_clip.set_audio(audio_clip)
-                            img_clip = img_clip.resize(height=720)
-                            
-                            video_path = os.path.join(tmp, "output.mp4")
-                            img_clip.write_videofile(video_path, fps=1, codec="libx264", 
-                                                      audio_codec="aac", logger=None)
-                            
-                            with open(video_path, "rb") as f:
-                                video_bytes = f.read()
-                            
-                            st.download_button(
-                                "⬇️ Download Video MP4",
-                                data=video_bytes,
-                                file_name="meme_video.mp4",
-                                mime="video/mp4"
-                            )
-                    except Exception as e:
-                        st.error(f"Gagal bikin video: {e}")
-        else:
-            help_text = "Install moviepy dulu" if not can_video else "Upload audio custom dulu"
-            st.button(f"🎬 Gabung Video", disabled=True, 
-                     use_container_width=True, help=help_text)
+                        font_play = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 44)
+                    except:
+                        font_play = ImageFont.load_default()
+
+                    play_text = "▶ Putar"
+                    # Shadow + background pill
+                    btn_w, btn_h = 200, 60
+                    cx, cy = w // 2, h // 2
+                    draw.rounded_rectangle(
+                        [cx - btn_w//2, cy - btn_h//2, cx + btn_w//2, cy + btn_h//2],
+                        radius=30, fill=(0, 0, 0, 180), outline=(255, 200, 87), width=3
+                    )
+                    # Teks tengah
+                    bbox = draw.textbbox((0, 0), play_text, font=font_play)
+                    tw = bbox[2] - bbox[0]
+                    th = bbox[3] - bbox[1]
+                    draw.text((cx - tw//2, cy - th//2 - 4), play_text, fill=(255, 200, 87), font=font_play)
+
+                    # Simpan gambar
+                    img_path = os.path.join(tmp, "frame.jpg")
+                    img.save(img_path, quality=92)
+
+                    # ── Siapkan audio ───────────────────────────────
+                    ext = os.path.splitext(uploaded_audio.name)[1] or ".mp3"
+                    audio_path = os.path.join(tmp, f"audio{ext}")
+                    with open(audio_path, "wb") as f:
+                        f.write(uploaded_audio.getvalue())
+
+                    # ── Render video ────────────────────────────────
+                    audio_clip = mpe.AudioFileClip(audio_path)
+                    duration = audio_clip.duration
+
+                    img_clip = (mpe.ImageClip(img_path)
+                                .set_duration(duration)
+                                .set_audio(audio_clip))
+
+                    video_path = os.path.join(tmp, "meme_gacor.mp4")
+                    img_clip.write_videofile(
+                        video_path,
+                        fps=1,
+                        codec="libx264",
+                        audio_codec="aac",
+                        logger=None
+                    )
+
+                    with open(video_path, "rb") as f:
+                        video_bytes = f.read()
+
+                st.success("✅ Video siap!")
+                st.video(video_bytes)
+                st.download_button(
+                    "⬇️ Download MP4",
+                    data=video_bytes,
+                    file_name="meme_gacor.mp4",
+                    mime="video/mp4",
+                    use_container_width=True
+                )
+
+            except ImportError:
+                st.error("❌ moviepy belum diinstall. Tambahin `moviepy` ke requirements.txt lalu restart app.")
+            except Exception as e:
+                st.error(f"❌ Gagal render: {e}")
 
 # ── FOOTER ───────────────────────────────────────────────────────────
 st.markdown("---")
 st.markdown("""
-<div style="text-align:center; color:#555; font-size:0.8rem; padding:1rem 0">
+<div style="text-align:center; color:#555; font-size:0.8rem; padding:0.5rem 0">
     Made with 😂 by IZFA · Cuma buat gabut, jangan serius
 </div>
 """, unsafe_allow_html=True)
