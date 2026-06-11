@@ -400,7 +400,7 @@ else:
 # ── FOOTER ───────────────────────────────────────────────────────────
 st.markdown("""
 <div class="vb-footer">
-    <span class="vb-footer-brand">MEME GACOR</span>
+    <span class="vb-footer-brand">KHUSUS WNI</span>
     <span class="vb-footer-note">Made by IZFA · Cuma buat gabut, jangan serius</span>
 </div>
 """, unsafe_allow_html=True)
