@@ -1,5 +1,6 @@
 import streamlit as st
 import os
+import subprocess
 import tempfile
 from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont
@@ -23,16 +24,19 @@ h1, h2, h3 { color: #FFC857 !important; }
 }
 .stButton > button:hover { background: #ffdb8a; transform: translateY(-1px); }
 hr { border-color: #2a2a2a; }
-.generate-btn > button {
-    width: 100%; padding: 1rem; font-size: 1.2rem;
-    background: #FFC857; border-radius: 12px;
-}
 </style>
 """, unsafe_allow_html=True)
 
 st.markdown("# 🔥 Meme Gacor Generator")
 st.markdown("Upload gambar + audio → langsung jadi video siap kirim WA")
 st.markdown("---")
+
+def check_ffmpeg():
+    try:
+        result = subprocess.run(["ffmpeg", "-version"], capture_output=True, timeout=5)
+        return result.returncode == 0
+    except:
+        return False
 
 # ── UPLOAD ───────────────────────────────────────────────────────────
 col1, col2 = st.columns(2)
@@ -74,102 +78,108 @@ if not ready:
     st.info("⬆️ Upload gambar dan audio dulu baru bisa generate")
 else:
     if st.button("🎬 Generate Video", use_container_width=True):
-        with st.spinner("Lagi render video..."):
-            try:
-                import moviepy.editor as mpe
-                import numpy as np
+        if not check_ffmpeg():
+            st.error("❌ ffmpeg tidak ditemukan di server ini.")
+        else:
+            with st.spinner("Lagi render video..."):
+                try:
+                    with tempfile.TemporaryDirectory() as tmp:
 
-                with tempfile.TemporaryDirectory() as tmp:
-                    # ── Siapkan gambar ──────────────────────────────
-                    img = Image.open(uploaded_file).convert("RGB")
+                        # ── Siapkan gambar ──────────────────────────
+                        img = Image.open(uploaded_file).convert("RGB")
 
-                    # Resize ke 720p max
-                    max_w = 1280
-                    if img.width > max_w:
-                        ratio = max_w / img.width
-                        img = img.resize((max_w, int(img.height * ratio)), Image.LANCZOS)
+                        # Resize max 1280px lebar
+                        max_w = 1280
+                        if img.width > max_w:
+                            ratio = max_w / img.width
+                            img = img.resize((max_w, int(img.height * ratio)), Image.LANCZOS)
 
-                    # Pastikan dimensi genap (wajib buat codec h264)
-                    w = img.width if img.width % 2 == 0 else img.width - 1
-                    h = img.height if img.height % 2 == 0 else img.height - 1
-                    img = img.resize((w, h), Image.LANCZOS)
+                        # Dimensi harus genap untuk h264
+                        w = img.width - (img.width % 2)
+                        h = img.height - (img.height % 2)
+                        img = img.resize((w, h), Image.LANCZOS)
 
-                    draw = ImageDraw.Draw(img)
+                        draw = ImageDraw.Draw(img)
 
-                    # Caption bar bawah
-                    if caption_text:
+                        # Caption bar bawah
+                        if caption_text:
+                            try:
+                                font_cap = ImageFont.truetype(
+                                    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 32)
+                            except:
+                                font_cap = ImageFont.load_default()
+                            bar_h = 55
+                            draw.rectangle([0, h - bar_h, w, h], fill=(0, 0, 0, 210))
+                            draw.text((16, h - bar_h + 10), caption_text,
+                                      fill=(255, 200, 87), font=font_cap)
+
+                        # Overlay tombol play di tengah
                         try:
-                            font_cap = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 32)
+                            font_play = ImageFont.truetype(
+                                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 44)
                         except:
-                            font_cap = ImageFont.load_default()
-                        bar_h = 55
-                        draw.rectangle([0, h - bar_h, w, h], fill=(0, 0, 0, 210))
-                        draw.text((16, h - bar_h + 10), caption_text, fill=(255, 200, 87), font=font_cap)
+                            font_play = ImageFont.load_default()
 
-                    # Tombol play overlay di tengah
-                    try:
-                        font_play = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 44)
-                    except:
-                        font_play = ImageFont.load_default()
+                        play_text = "▶  Putar"
+                        btn_w, btn_h = 210, 65
+                        cx, cy = w // 2, h // 2
+                        draw.rounded_rectangle(
+                            [cx - btn_w//2, cy - btn_h//2, cx + btn_w//2, cy + btn_h//2],
+                            radius=32, fill=(0, 0, 0, 175), outline=(255, 200, 87), width=3
+                        )
+                        bbox = draw.textbbox((0, 0), play_text, font=font_play)
+                        tw = bbox[2] - bbox[0]
+                        th = bbox[3] - bbox[1]
+                        draw.text((cx - tw//2, cy - th//2 - 2), play_text,
+                                  fill=(255, 200, 87), font=font_play)
 
-                    play_text = "▶ Putar"
-                    # Shadow + background pill
-                    btn_w, btn_h = 200, 60
-                    cx, cy = w // 2, h // 2
-                    draw.rounded_rectangle(
-                        [cx - btn_w//2, cy - btn_h//2, cx + btn_w//2, cy + btn_h//2],
-                        radius=30, fill=(0, 0, 0, 180), outline=(255, 200, 87), width=3
-                    )
-                    # Teks tengah
-                    bbox = draw.textbbox((0, 0), play_text, font=font_play)
-                    tw = bbox[2] - bbox[0]
-                    th = bbox[3] - bbox[1]
-                    draw.text((cx - tw//2, cy - th//2 - 4), play_text, fill=(255, 200, 87), font=font_play)
+                        # Simpan frame
+                        img_path = os.path.join(tmp, "frame.png")
+                        img.save(img_path)
 
-                    # Simpan gambar
-                    img_path = os.path.join(tmp, "frame.jpg")
-                    img.save(img_path, quality=92)
+                        # ── Simpan audio ────────────────────────────
+                        ext = os.path.splitext(uploaded_audio.name)[1] or ".mp3"
+                        audio_path = os.path.join(tmp, f"audio{ext}")
+                        with open(audio_path, "wb") as f:
+                            f.write(uploaded_audio.getvalue())
 
-                    # ── Siapkan audio ───────────────────────────────
-                    ext = os.path.splitext(uploaded_audio.name)[1] or ".mp3"
-                    audio_path = os.path.join(tmp, f"audio{ext}")
-                    with open(audio_path, "wb") as f:
-                        f.write(uploaded_audio.getvalue())
+                        # ── Render dengan ffmpeg ────────────────────
+                        video_path = os.path.join(tmp, "meme_gacor.mp4")
+                        cmd = [
+                            "ffmpeg", "-y",
+                            "-loop", "1",
+                            "-i", img_path,
+                            "-i", audio_path,
+                            "-c:v", "libx264",
+                            "-tune", "stillimage",
+                            "-c:a", "aac",
+                            "-b:a", "192k",
+                            "-pix_fmt", "yuv420p",
+                            "-shortest",
+                            "-movflags", "+faststart",
+                            video_path
+                        ]
+                        result = subprocess.run(cmd, capture_output=True, timeout=120)
 
-                    # ── Render video ────────────────────────────────
-                    audio_clip = mpe.AudioFileClip(audio_path)
-                    duration = audio_clip.duration
+                        if result.returncode != 0:
+                            st.error("❌ ffmpeg error:")
+                            st.code(result.stderr.decode())
+                        else:
+                            with open(video_path, "rb") as f:
+                                video_bytes = f.read()
 
-                    img_clip = (mpe.ImageClip(img_path)
-                                .set_duration(duration)
-                                .set_audio(audio_clip))
+                            st.success("✅ Video siap!")
+                            st.video(video_bytes)
+                            st.download_button(
+                                "⬇️ Download MP4",
+                                data=video_bytes,
+                                file_name="meme_gacor.mp4",
+                                mime="video/mp4",
+                                use_container_width=True
+                            )
 
-                    video_path = os.path.join(tmp, "meme_gacor.mp4")
-                    img_clip.write_videofile(
-                        video_path,
-                        fps=1,
-                        codec="libx264",
-                        audio_codec="aac",
-                        logger=None
-                    )
-
-                    with open(video_path, "rb") as f:
-                        video_bytes = f.read()
-
-                st.success("✅ Video siap!")
-                st.video(video_bytes)
-                st.download_button(
-                    "⬇️ Download MP4",
-                    data=video_bytes,
-                    file_name="meme_gacor.mp4",
-                    mime="video/mp4",
-                    use_container_width=True
-                )
-
-            except ImportError:
-                st.error("❌ moviepy belum diinstall. Tambahin `moviepy` ke requirements.txt lalu restart app.")
-            except Exception as e:
-                st.error(f"❌ Gagal render: {e}")
+                except Exception as e:
+                    st.error(f"❌ Error: {e}")
 
 # ── FOOTER ───────────────────────────────────────────────────────────
 st.markdown("---")
